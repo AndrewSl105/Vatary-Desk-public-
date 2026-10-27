@@ -7,11 +7,20 @@
 
 Open almost any file, edit PDFs in place, keep everything in folders with full version history, and share it with your team. All in one browser tab.
 
-[Website](https://vatarydesk.com) · [Architecture](#architecture) · [Author](https://andrii.tech)
+**[Open Vatary Desk →](https://vatarydesk.com)** · **[AI console live demo →](https://demo-ai-staging.vatarydesk.com/)**
+
+[Architecture](#architecture) · [Author](https://andrii.tech)
 
 </div>
 
 ---
+
+## Try it
+
+| | |
+|---|---|
+| 🖥 **The product** | [vatarydesk.com](https://vatarydesk.com): the live workspace |
+| 📊 **AI operations console** | [demo-ai-staging.vatarydesk.com](https://demo-ai-staging.vatarydesk.com/): explore the LLM gateway's console with sample traffic. No account needed |
 
 ## The idea
 
@@ -113,7 +122,7 @@ Every user action gets one correlation id that travels through every service, so
 | **Sentry** | Errors, performance and releases in the web app and the API |
 | **Microsoft Clarity** | Session replays and heatmaps, with document content masked |
 | **Grafana + Loki** | Logs from every container, dashboards and alerts |
-| **AI operations console** | Per-call traces, latency p50/p95, cost, fallback and error rates, and a graph of all model calls behind one user action |
+| **AI operations console** | Per-call traces, latency p50/p95, cost, fallback and error rates, and a graph of all model calls behind one user action. [Live demo →](https://demo-ai-staging.vatarydesk.com/) |
 
 ---
 
