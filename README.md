@@ -27,7 +27,7 @@ Vatary Desk puts that whole loop on one desk. You upload a file once. From then 
 - **Organize pages.** Reorder, rotate and delete pages, split one PDF into parts or merge several into one.
 - **Compose a new PDF** from pages of other files on your desk.
 - **Respect protection.** Owner-protected PDFs open normally. When you save, you choose to keep the original protection or remove it, so it is never stripped by accident.
-- **Built for big files.** Files go straight to object storage, and processing runs in a separate service, so a 500-page manual does not slow the app down.
+- **Built for big files.** Uploads go straight to storage and processing runs in the background, so a 500-page manual does not slow the app down.
 
 ### 🗂 Open almost any format
 | Kind | Formats |
@@ -58,7 +58,7 @@ Vatary Desk puts that whole loop on one desk. You upload a file once. From then 
 - Access set on a folder applies to everything inside it.
 - **Public links** for people outside the workspace.
 - Email notification when someone gives you access.
-- **Real-time co-editing** of pages: see who else is in the document, with changes merged by CRDTs (Yjs).
+- **Real-time co-editing** of pages: see who else is in the document, with simultaneous changes merged automatically.
 - Organizations and teams with a shared workspace.
 
 ### ✍️ Pages and widgets
@@ -79,62 +79,41 @@ Vatary Desk puts that whole loop on one desk. You upload a file once. From then 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/architecture-dark.png">
-  <img alt="Vatary Desk architecture: React PWA behind nginx, NestJS API, Go orchestrator calling a Python document service and a Go AI runtime over gRPC, PostgreSQL with pgvector, Cloudflare R2, LLM providers, and Sentry, Microsoft Clarity, Grafana and Loki for observability" src="docs/architecture-light.png">
+  <img alt="Vatary Desk architecture: a React PWA behind nginx, a NestJS API, a workflow orchestrator calling a document service and an AI gateway over gRPC, PostgreSQL with pgvector, Cloudflare R2, LLM providers, and Sentry, Microsoft Clarity, Grafana and Loki for observability" src="docs/architecture-light.png">
 </picture>
 
-Five application containers on one host, written in three languages, each in the language that suits its job.
+A service-oriented system in **TypeScript, Go and Python**, each language used where it is strongest. Everything runs in Docker containers behind a single reverse proxy.
 
-| Service | Stack | Role |
+| Layer | Technology | Responsibility |
 |---|---|---|
-| **client** | React, TypeScript, Vite, MUI, TanStack Query, Zustand, Tiptap, Yjs, pdf.js, Konva | The web app and PWA, served by **nginx**, which also proxies the API and WebSockets |
-| **server** | NestJS, Prisma, PostgreSQL (Neon) + pgvector | Accounts, files, folders, versions, sharing, billing, real-time collaboration, AI gateway |
-| **orchestrator** | Go, gRPC `workflow.v1` | Runs long jobs as workflows with steps, retries and progress |
-| **docsvc** | Python, PyMuPDF, LibreOffice, pdf2docx, pikepdf/qpdf, ffmpeg | Conversion, PDF editing, extraction, outlines and chunking for AI |
-| **ai-runtime** | Go, gRPC `ai.v1`, SQLite | LLM gateway for 9 providers, with prompt registry, fallbacks, schema checks, cost tracking and an operations console |
+| **Web app** | React, TypeScript, Vite, MUI, TanStack Query, Zustand, Tiptap, Yjs, pdf.js, Konva | Installable PWA with offline cache, rich editors and real-time collaboration |
+| **API** | NestJS, Prisma | Accounts, files, folders, versions, sharing and roles, billing, real-time sync, AI features |
+| **Orchestrator** | Go, gRPC | Long-running jobs as workflows with steps, retries and progress |
+| **Document service** | Python, PyMuPDF, LibreOffice, pdf2docx, qpdf, ffmpeg | Conversion, PDF editing, extraction and document structure for AI |
+| **AI gateway** | Go, gRPC | One entry point to 9 LLM providers: prompt registry, model fallbacks, schema validation, cost tracking |
+| **Data** | PostgreSQL + pgvector, Cloudflare R2 | Relational data and vector search, object storage for files and versions |
+| **Infrastructure** | Docker Compose, nginx | Containerised services, TLS, reverse proxy for HTTP and WebSockets |
 
 ### Engineering decisions
 
-- **Blobs, not bytes.** Services pass presigned R2 links (`BlobRef`) to each other and verify the sha256. File contents never pass through the API process.
-- **Contracts first.** Each service has a `.proto` contract. Go and Python code is generated from it, and Node loads it at runtime, so all three always use the same contract.
-- **Provider keys in one place.** Only `ai-runtime` holds LLM API keys. It picks the model per prompt, falls back to another on `429` or `5xx`, validates the answer against a JSON schema and returns the exact cost of every call.
-- **One correlation id per user action.** It travels through every hop, so a click can be followed through Sentry, the logs and the AI console.
-- **Tests run inside the Docker build.** A failing build never produces an image.
+- **Files never pass through the API.** The browser uploads straight to object storage with signed links, and services exchange links instead of bytes. Large PDFs never sit in application memory, and the API stays fast under heavy uploads.
+- **Heavy work runs outside the request path.** Conversion, PDF edits and AI pipelines run as orchestrated workflows with retries and progress reporting, so a slow job never blocks the interface.
+- **Strict contracts between services.** Every service boundary is a versioned gRPC contract shared by the TypeScript, Go and Python code, so the services cannot drift apart.
+- **AI under control.** Only one service holds provider keys. It picks a model per task, falls back to another provider on errors, validates every answer against a schema and records the exact cost of each call. Usage is metered per plan.
+- **Long documents without huge prompts.** The AI first reads a document's outline, then pulls only the sections it needs. Tables reach the model whole.
+- **Collaboration without conflicts.** Pages sync in real time through CRDTs, so simultaneous edits merge instead of overwriting each other.
+- **Quality gates in the build.** Over 1,100 test files across the stack. Tests run inside the Docker build, so a failing build never produces an image.
 
 ### Observability
 
+Every user action gets one correlation id that travels through every service, so a single click can be traced end to end.
+
 | Tool | What it covers |
 |---|---|
-| **Sentry** | Errors and performance in the browser (`@sentry/react`) and the API (`@sentry/nestjs`) |
+| **Sentry** | Errors, performance and releases in the web app and the API |
 | **Microsoft Clarity** | Session replays and heatmaps, with document content masked |
 | **Grafana + Loki** | Logs from every container, dashboards and alerts |
-| **AI Runtime console** | Per-call traces, latency p50/p95, cost, fallback and schema-failure rates, and a graph of all model calls behind one user action |
-
----
-
-## Repository layout
-
-```
-client/          React PWA
-server/          NestJS API
-workflow-runtime/  Go orchestrator
-docsvc/          Python document service
-ai-runtime/      Go LLM gateway + console
-proto/           gRPC contracts shared by all services
-docs/            architecture notes and ADRs
-```
-
-## Running locally
-
-```bash
-# the whole stack
-docker compose -f docker-compose.dev.yml up --build
-
-# a single service on its own
-cd docsvc && docker compose up --build       # OpenAPI UI on http://localhost:8000/docs
-cd ai-runtime && docker compose up --build   # console on http://localhost:8080
-```
-
-Without provider keys, `ai-runtime` falls back to a built-in mock provider, so the console and playground still work offline.
+| **AI operations console** | Per-call traces, latency p50/p95, cost, fallback and error rates, and a graph of all model calls behind one user action |
 
 ---
 
