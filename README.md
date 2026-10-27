@@ -3,6 +3,8 @@
 # Vatary Desk
 
 **A document workspace with AI built in.**
+<img width="1269" height="952" alt="image" src="https://github.com/user-attachments/assets/cf2059a0-6108-4e67-ab61-dbb1b604b88b" />
+
 Open almost any file, edit PDFs in place, keep everything in folders with full version history, and share it with your team. All in one browser tab.
 
 [Website](https://vatarydesk.com) · [Architecture](#architecture) · [Author](https://andrii.tech)
